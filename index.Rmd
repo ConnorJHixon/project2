@@ -46,47 +46,134 @@ class_diag <- function(score, truth, positive, cutoff=.5){
 
 # Mining, Classification, Prediction
 
-## Name and EID here
+## Connor Hixon, cjh4572
 
 ### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc. See instructions for more information
+Last season, I recorded every play for UT basketball. These two data sets each include information regarding every offensive play Texas basketball had in 2020-21 season. I reduced the dataset down, however, so only Game number, opponent, play ID, poss#, Clutch/Garbage time, transition and 2nd chance possessions, number of passes, paint touch or not and point result were found. In the dataset, every game was give a game number found in the GAME.# column and there is also a column with the opponent we played. In the Play ID and poss # columns represent a number related to the possessions or play of the game which differ since there can be many plays on one possessions. On Clutch, Garbage, Transition and 2nd Chance, the columns represent a true false value for the specific variable. Paint Touch is also a true false value that represents whether the team had a paint touch that directly affected the outcome. Point Result represents the amount of points scored on the specific play.  
 
 ```{R}
 library(tidyverse)
 # read your datasets in here, e.g., with read_csv()
+data1 <- read_csv('/stor/home/cjh4572/DATA/Dataset1.csv')
+data2 <- read_csv('/stor/home/cjh4572/DATA/Dataset2.csv')
 
 # if your dataset needs tidying, do so here
-
-# any other code here
+bball <- full_join(data1, data2, by = c('GAME.#', 'PLAY.ID', 'POSS.#'))
+bball <- bball %>%
+  select(`GAME.#`, OPPONENT, `POSS.#`, PLAY.ID, `CLUTCH?`, `GARBAGE?`, `TRANSITION?`,`2ND.CHANCE?`, PASSES, PAINT.TOUCH, POINT.RESULT)
 ```
 
 ### Cluster Analysis
 
 ```{R}
+#Reducing the dataset
+reduce_data <- bball %>%
+  select(`POSS.#`,`PLAY.ID`, `POINT.RESULT`, `PASSES`)
 library(cluster)
-# clustering code here
+library(GGally)
+library(ggplot2)
+sil_width<-vector() 
+for(i in 2:10){  
+  kms <- kmeans(reduce_data,centers=i) #compute k-means solution for each k
+  sil <- silhouette(kms$cluster,dist(reduce_data)) #get sil widths
+  sil_width[i]<-mean(sil[,3]) #take averages (higher is better)
+}
+ggplot()+geom_line(aes(x=1:10,y=sil_width))+scale_x_continuous(name="k",breaks=1:10)
+
+set.seed(160)
+data_pam <- reduce_data %>% pam(k=2)
+data_pam
+plot(data_pam, which=2)
+
+
+reduce_data %>%
+  mutate(cluster = as.factor(data_pam$clustering)) %>%
+  ggpairs(cols = 1:6, aes(color =cluster))
+
 ```
 
-Discussion of clustering here
+I created a subset of the dataset bball with variables, POSS.#, PLAY.ID, PASSES, POINT.RESULTS and called it reduce_data. When looking at the goodness of fit we can see that we get an average silhouette width of 0.62. This can be interpreted as a reasonable structure. Whe looking at the ggpair, the Poss.# and Play.ID have a very high correlation which should make sure since plays are correlated witht he number of possessions that are occurring. This also means that Texas most of the team is only having around 1 or 2 plays per possession. With the other variables in the data there is not much of a correlation such as there is not much of a correlation between how many passes in a possessions and the amount of points that is happening. 
     
     
 ### Dimensionality Reduction with PCA
 
 ```{R}
-# PCA code here
+#get all of the numeric values and same to a new dataset
+bball_n <- bball %>% select_if(is.numeric) %>% scale()
+princomp(bball_nums, cor=T) -> pca1
+summary(pca1, loadings = T)
+
+eigval <-  pca1$sdev^2 #square to convert SDs to eigenvalues
+varprop=round(eigval/sum(eigval), 2) #proportion of var explained by each PC
+
+ggplot() + geom_bar(aes(y=varprop, x=1:5), stat="identity") + xlab("") + geom_path(aes(y=varprop, x=1:5)) + 
+  geom_text(aes(x=1:5, y=varprop, label=round(varprop, 2)), vjust=1, col="white", size=5) + 
+  scale_y_continuous(breaks=seq(0, .6, .2), labels = scales::percent) + 
+  scale_x_continuous(breaks=1:10)
+
 ```
 
-Discussions of PCA here. 
+For the PCA section, I created a new variable called bball_n which is the dataset that only contains the columns with numeric values from the bball dataset. When looking at the graph we can see that we get a PC1 value of 0.40 and a PC2 value of 0.2. In my data, PC3 has the same value has PC2 and PC4 is just below with a 0.19 value. It shows that around 99% of variance is shown through the PCA representing that there is not much correlation between the variables. 
 
 ###  Linear Classifier
 
 ```{R}
-# linear classifier code here
+#Transition and Passes
+logistic_fit <- glm(`TRANSITION?` ~ PASSES, data = bball, family = 'binomial')
+prob_reg <- predict (logistic_fit, type = 'response')
+
+class_diag(prob_reg, bball$`TRANSITION?`, positive = "TRUE")
+
+#Paint Touch and Game.#
+logistic_fit <- glm(`TRANSITION?` ~ `GAME.#`, data = bball, family = 'binomial')
+prob_reg <- predict (logistic_fit, type = 'response')
+
+class_diag(prob_reg, bball$`TRANSITION?`, positive = "TRUE")
+
+#Paint Touch and Point.result
+logistic_fit <- glm(`TRANSITION?` ~ POINT.RESULT, data = bball, family = 'binomial')
+prob_reg <- predict (logistic_fit, type = 'response')
+
+class_diag(prob_reg, bball$`TRANSITION?`, positive = "TRUE")
+
+#Paint Touch and Poss.#
+logistic_fit <- glm(`TRANSITION?` ~ `POSS.#`, data = bball, family = 'binomial')
+prob_reg <- predict (logistic_fit, type = 'response')
+
+class_diag(prob_reg, bball$`TRANSITION?`, positive = "TRUE")
+
+#Paint Touch and Play.ID
+logistic_fit <- glm(`TRANSITION?` ~ PLAY.ID, data = bball, family = 'binomial')
+prob_reg <- predict (logistic_fit, type = 'response')
+
+class_diag(prob_reg, bball$`TRANSITION?`, positive = "TRUE")
+
+y = bball$`TRANSITION?`
+y <- factor(y, levels = c('TRUE', 'FALSE'))
+y_hat <- sample(c('TRUE', 'FALSE'), size = length(y), replace = T)
+table(actual = y, predicted = y_hat)
 ```
 
 ```{R}
-# cross-validation of linear classifier here
+set.seed(1234)
+k=10 #choose number of folds
+data<-bball[sample(nrow(bball)),] #randomly order rows
+folds<-cut(seq(1:nrow(bball)),breaks=k,labels=F) #create folds
+diags<-NULL
+for(i in 1:k){
+  ## Create training and test sets
+  train<-data[folds!=i,] 
+  test<-data[folds==i,]
+  truth<-test$`TRANSITION?` ## Truth labels for fold i
+  ## Train model on training set (all but fold i)
+  fit<-glm(as.factor(`TRANSITION?`)~PASSES,data=train,family="binomial")
+  ## Test model on test set (fold i) 
+  probs<-predict(fit,newdata = test,type="response")
+  ## Get diagnostics for fold i
+  diags<-rbind(diags,class_diag(probs,truth, positive=1))
+}
+summarize_all(diags,mean)
 ```
 
 Discussion here
@@ -96,10 +183,37 @@ Discussion here
 ```{R}
 library(caret)
 # non-parametric classifier code here
+knn_fit <- knn3(factor(`TRANSITION?`==1,levels=c("TRUE","FALSE")) ~ PASSES, data=bball, k=2)
+y_hat_knn <- predict(knn_fit,bball)
+head(y_hat_knn)
+
+
+table(truth= factor(bball$PAINT.TOUCH==1, levels=c("TRUE","FALSE")),
+      prediction= factor(y_hat_knn[,1]>.5, levels=c("TRUE","FALSE")))
+
+class_diag(y_hat_knn[,1],bball$`TRANSITION?`, positive=1)
 ```
 
 ```{R}
 # cross-validation of np classifier here
+set.seed(1234)
+k=10 #choose number of folds
+data<-bball[sample(nrow(bball)),] #randomly order rows
+folds<-cut(seq(1:nrow(bball)),breaks=k,labels=F) #create folds
+diags<-NULL
+for(i in 1:k){
+  ## Create training and test sets
+  train<-data[folds!=i,] 
+  test<-data[folds==i,]
+  truth<-test$`TRANSITION?` ## Truth labels for fold i
+  ## Train model on training set (all but fold i)
+  fit<-knn3(as.factor(`TRANSITION?`)~PASSES,data=train)
+  ## Test model on test set (fold i) 
+  probs<-predict(fit,newdata = test)[,2]
+  ## Get diagnostics for fold i
+  diags<-rbind(diags,class_diag(probs,truth, positive=1))
+}
+summarize_all(diags,mean)
 ```
 
 Discussion
@@ -108,26 +222,47 @@ Discussion
 ### Regression/Numeric Prediction
 
 ```{R}
-# regression model code here
+fit<-lm(PASSES~.,data=bball) 
+yhat<-predict(fit) 
+mean((bball$PASSES-yhat)^2) 
 ```
 
 ```{R}
 # cross-validation of regression model here
+set.seed(1234)
+k=5 #choose number of folds
+data<-bball[sample(nrow(bball)),] #randomly order rows
+folds<-cut(seq(1:nrow(bball)),breaks=k,labels=F) #create folds
+diags<-NULL
+for(i in 1:k){
+  train<-data[folds!=i,]
+  test<-data[folds==i,]
+  ## Fit linear regression model to training set
+  fit<-lm(PASSES~.,data=train)
+  ## Get predictions/y-hats on test set (fold i)
+  yhat<-predict(fit,newdata=test)
+  ## Compute prediction error  (MSE) for fold i
+  diags<-mean((test$PASSES-yhat)^2) 
+}
+mean(diags)
 ```
-
+Is not overfitting
 Discussion
 
 ### Python 
 
 ```{R}
 library(reticulate)
+data <- bball$PASSES
 ```
 
 ```{python}
-# python code here
+new_data = r.data
+sum(new_data)
+sum(new_data)/27
 ```
 
-Discussion
+In the code, I first saved all of the passes values to a variable called data. Using python, I converted the r.data variable to a new_data in python and added up all of the passes finding that in the entire season Texas has 4471 passes in all and averaged 165.6 passes per game in the season. 
 
 ### Concluding Remarks
 
