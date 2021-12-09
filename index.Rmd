@@ -101,7 +101,7 @@ I created a subset of the dataset bball with variables, POSS.#, PLAY.ID, PASSES,
 ```{R}
 #get all of the numeric values and same to a new dataset
 bball_n <- bball %>% select_if(is.numeric) %>% scale()
-princomp(bball_nums, cor=T) -> pca1
+princomp(bball_n, cor=T) -> pca1
 summary(pca1, loadings = T)
 
 eigval <-  pca1$sdev^2 #square to convert SDs to eigenvalues
